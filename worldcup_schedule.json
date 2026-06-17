@@ -1,0 +1,196 @@
+{
+  "matches": [
+    {
+      "id": 1,
+      "home_team": "墨西哥",
+      "home_code": "mx",
+      "away_team": "南非",
+      "away_code": "za",
+      "time": "揭幕战",
+      "date": "06-11",
+      "status": "已完赛",
+      "home_score": 2,
+      "away_score": 1,
+      "minute": 90,
+      "events": [
+        {"type": "goal", "team": "home", "player": "希门尼斯", "minute": 18},
+        {"type": "goal", "team": "away", "player": "陶", "minute": 45},
+        {"type": "goal", "team": "home", "player": "洛萨诺", "minute": 78}
+      ]
+    },
+    {
+      "id": 2,
+      "home_team": "加拿大",
+      "home_code": "ca",
+      "away_team": "卡塔尔",
+      "away_code": "qa",
+      "time": "小组赛",
+      "date": "06-12",
+      "status": "已完赛",
+      "home_score": 3,
+      "away_score": 0,
+      "minute": 90,
+      "events": [
+        {"type": "goal", "team": "home", "player": "戴维", "minute": 12},
+        {"type": "goal", "team": "home", "player": "拉林", "minute": 34},
+        {"type": "goal", "team": "home", "player": "布坎南", "minute": 82}
+      ]
+    },
+    {
+      "id": 3,
+      "home_team": "美国",
+      "home_code": "us",
+      "away_team": "巴拉圭",
+      "away_code": "py",
+      "time": "小组赛",
+      "date": "06-13",
+      "status": "已完赛",
+      "home_score": 1,
+      "away_score": 1,
+      "minute": 90,
+      "events": [
+        {"type": "goal", "team": "away", "player": "阿尔米隆", "minute": 22},
+        {"type": "goal", "team": "home", "player": "普利西奇", "minute": 67}
+      ]
+    },
+    {
+      "id": 4,
+      "home_team": "巴西",
+      "home_code": "br",
+      "away_team": "摩洛哥",
+      "away_code": "ma",
+      "time": "小组赛",
+      "date": "06-13",
+      "status": "已完赛",
+      "home_score": 2,
+      "away_score": 0,
+      "minute": 90,
+      "events": [
+        {"type": "goal", "team": "home", "player": "维尼修斯", "minute": 39},
+        {"type": "goal", "team": "home", "player": "罗德里戈", "minute": 74}
+      ]
+    },
+    {
+      "id": 5,
+      "home_team": "德国",
+      "home_code": "de",
+      "away_team": "科特迪瓦",
+      "away_code": "ci",
+      "time": "小组赛",
+      "date": "06-14",
+      "status": "已完赛",
+      "home_score": 3,
+      "away_score": 1,
+      "minute": 90,
+      "events": [
+        {"type": "goal", "team": "home", "player": "维尔茨", "minute": 9},
+        {"type": "goal", "team": "home", "player": "哈弗茨", "minute": 45},
+        {"type": "goal", "team": "away", "player": "阿莱", "minute": 61},
+        {"type": "goal", "team": "home", "player": "菲尔克鲁格", "minute": 88}
+      ]
+    },
+    {
+      "id": 6,
+      "home_team": "西班牙",
+      "home_code": "es",
+      "away_team": "乌拉圭",
+      "away_code": "uy",
+      "time": "焦点战",
+      "date": "06-15",
+      "status": "已完赛",
+      "home_score": 1,
+      "away_score": 2,
+      "minute": 90,
+      "events": [
+        {"type": "goal", "team": "home", "player": "莫拉塔", "minute": 30},
+        {"type": "goal", "team": "away", "player": "努涅斯", "minute": 55},
+        {"type": "goal", "team": "away", "player": "巴尔韦德", "minute": 82}
+      ]
+    },
+    {
+      "id": 7,
+      "home_team": "法国",
+      "home_code": "fr",
+      "away_team": "塞内加尔",
+      "away_code": "sn",
+      "time": "20:00",
+      "date": "06-16",
+      "status": "进行中",
+      "home_score": 1,
+      "away_score": 0,
+      "minute": 72,
+      "events": [
+        {"type": "goal", "team": "home", "player": "姆巴佩", "minute": 28}
+      ]
+    },
+    {
+      "id": 8,
+      "home_team": "阿根廷",
+      "home_code": "ar",
+      "away_team": "阿尔及利亚",
+      "away_code": "dz",
+      "time": "23:00",
+      "date": "06-16",
+      "status": "未开始",
+      "home_score": 0,
+      "away_score": 0,
+      "minute": 0,
+      "events": []
+    },
+    {
+      "id": 9,
+      "home_team": "葡萄牙",
+      "home_code": "pt",
+      "away_team": "乌兹别克斯坦",
+      "away_code": "uz",
+      "time": "02:00",
+      "date": "06-17",
+      "status": "未开始",
+      "home_score": 0,
+      "away_score": 0,
+      "minute": 0,
+      "events": []
+    },
+    {
+      "id": 10,
+      "home_team": "英格兰",
+      "home_code": "gb-eng",
+      "away_team": "克罗地亚",
+      "away_code": "hr",
+      "time": "05:00",
+      "date": "06-17",
+      "status": "未开始",
+      "home_score": 0,
+      "away_score": 0,
+      "minute": 0,
+      "events": []
+    }
+  ],
+  "standings": [
+    {
+      "group": "A组",
+      "teams": [
+        {"rank": 1, "name": "墨西哥", "code": "mx", "played": 1, "win": 1, "draw": 0, "lose": 0, "gf": 2, "ga": 1, "pts": 3},
+        {"rank": 2, "name": "韩国", "code": "kr", "played": 0, "win": 0, "draw": 0, "lose": 0, "gf": 0, "ga": 0, "pts": 0},
+        {"rank": 3, "name": "乌克兰", "code": "ua", "played": 0, "win": 0, "draw": 0, "lose": 0, "gf": 0, "ga": 0, "pts": 0},
+        {"rank": 4, "name": "南非", "code": "za", "played": 1, "win": 0, "draw": 0, "lose": 1, "gf": 1, "ga": 2, "pts": 0}
+      ]
+    },
+    {
+      "group": "B组",
+      "teams": [
+        {"rank": 1, "name": "加拿大", "code": "ca", "played": 1, "win": 1, "draw": 0, "lose": 0, "gf": 3, "ga": 0, "pts": 3},
+        {"rank": 2, "name": "瑞士", "code": "ch", "played": 0, "win": 0, "draw": 0, "lose": 0, "gf": 0, "ga": 0, "pts": 0},
+        {"rank": 3, "name": "瑞典", "code": "se", "played": 0, "win": 0, "draw": 0, "lose": 0, "gf": 0, "ga": 0, "pts": 0},
+        {"rank": 4, "name": "卡塔尔", "code": "qa", "played": 1, "win": 0, "draw": 0, "lose": 1, "gf": 0, "ga": 3, "pts": 0}
+      ]
+    }
+  ],
+  "top_scorers": [
+    {"rank": 1, "name": "姆巴佩", "team": "法国", "code": "fr", "goals": 1},
+    {"rank": 2, "name": "维尼修斯", "team": "巴西", "code": "br", "goals": 1},
+    {"rank": 3, "name": "普利西奇", "team": "美国", "code": "us", "goals": 1},
+    {"rank": 4, "name": "洛萨诺", "team": "墨西哥", "code": "mx", "goals": 1},
+    {"rank": 5, "name": "巴尔韦德", "team": "乌拉圭", "code": "uy", "goals": 1}
+  ]
+}

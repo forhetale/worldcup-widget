@@ -1,0 +1,313 @@
+/* ==========================================================================
+   2026 世界杯比分挂件 - 磨砂玻璃风格
+   ========================================================================== */
+
+:root {
+  --bg-gradient: linear-gradient(135deg, rgba(6, 28, 20, 0.72) 0%, rgba(10, 16, 26, 0.88) 100%);
+  --color-primary: #00f076;
+  --color-gold: #ffd700;
+  --color-danger: #ff3838;
+  --color-warning: #ffd32a;
+  --text-main: rgba(255, 255, 255, 0.95);
+  --text-muted: rgba(255, 255, 255, 0.6);
+  --text-dim: rgba(255, 255, 255, 0.35);
+  --card-shadow: 0 6px 16px rgba(0, 0, 0, 0.2), inset 0 1px 1.5px rgba(255, 255, 255, 0.12);
+  --glass-blur: blur(25px);
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; user-select: none; }
+
+html, body {
+  background: transparent !important;
+}
+
+body {
+  font-family: 'Outfit', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  color: var(--text-main);
+  overflow: hidden;
+  width: 100vw;
+  height: 100vh;
+}
+
+.pywebview-drag { cursor: grab; }
+.pywebview-drag:active { cursor: grabbing; }
+.no-drag { cursor: default !important; }
+
+#app-container {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  padding: 8px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+/* ========== 主卡片 ========== */
+#widget-card {
+  width: 100%;
+  height: 100%;
+  background: var(--bg-gradient);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: var(--card-shadow);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  transition: border-color 0.4s ease, box-shadow 0.4s ease, opacity 0.4s ease;
+}
+
+#widget-card::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  border-radius: 16px;
+  padding: 1px;
+  background: linear-gradient(135deg, rgba(255,255,255,0.12), rgba(0,240,118,0.05), rgba(255,215,0,0.05), rgba(255,255,255,0.02));
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+}
+
+#widget-card:hover {
+  border-color: rgba(0, 240, 118, 0.25);
+  box-shadow: 0 20px 48px rgba(0, 0, 0, 0.55), 0 0 15px rgba(0, 240, 118, 0.1);
+}
+
+/* ========== 顶部控制栏 ========== */
+.control-header {
+  height: 34px;
+  min-height: 34px;
+  padding: 0 12px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: rgba(0, 0, 0, 0.25);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.brand { display: flex; align-items: center; gap: 6px; }
+.brand-text {
+  font-size: 11px; font-weight: 700; letter-spacing: 1.5px;
+  color: var(--color-gold);
+  text-shadow: 0 0 4px rgba(255, 215, 0, 0.3);
+}
+.live-dot {
+  width: 6px; height: 6px; border-radius: 50%;
+  background-color: var(--text-dim);
+  transition: all 0.3s ease;
+}
+.live-dot.active {
+  background-color: var(--color-primary);
+  box-shadow: 0 0 8px var(--color-primary);
+  animation: pulse-live 1.8s infinite;
+}
+
+.data-status {
+  font-size: 9px;
+  color: var(--text-dim);
+  margin-left: 4px;
+}
+
+.header-actions { display: flex; gap: 8px; align-items: center; }
+.action-btn {
+  background: transparent; border: none; cursor: pointer;
+  width: 22px; height: 22px; border-radius: 4px;
+  display: flex; justify-content: center; align-items: center;
+  color: var(--text-muted); transition: all 0.2s ease;
+}
+.action-btn svg { width: 14px; height: 14px; fill: currentColor; }
+.action-btn:hover { background: rgba(255,255,255,0.1); color: var(--text-main); }
+.action-btn.close:hover { background: var(--color-danger); color: white; }
+
+/* ========== 内容区与滑动 ========== */
+.content-body { flex: 1; position: relative; overflow: hidden; }
+
+#views-slider {
+  display: flex;
+  width: 200%; /* 2 个视图 */
+  height: 100%;
+  transition: transform 0.5s cubic-bezier(0.25, 1, 0.5, 1);
+}
+.view-pane {
+  width: 50%;
+  height: 100%;
+  padding: 10px 12px;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+.view-pane::-webkit-scrollbar { width: 4px; }
+.view-pane::-webkit-scrollbar-track { background: transparent; }
+.view-pane::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); border-radius: 2px; }
+
+.slider-live { transform: translateX(0); }
+.slider-schedule { transform: translateX(-50%); }
+
+/* ========== 无比赛提示 ========== */
+.no-match-notice {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  text-align: center;
+  gap: 8px;
+  opacity: 0.7;
+}
+.no-match-icon {
+  font-size: 32px;
+  filter: grayscale(60%);
+  animation: float-icon 3s ease-in-out infinite;
+}
+@keyframes float-icon {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-6px); }
+}
+.no-match-title {
+  font-size: 14px; font-weight: 600; color: var(--text-main);
+  letter-spacing: 0.5px;
+}
+.no-match-sub {
+  font-size: 10px; color: var(--text-dim);
+}
+
+/* ========== 实时比分卡片 ========== */
+.match-score-card {
+  display: flex;
+  height: 100%;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 6px;
+}
+.team-block { display: flex; flex-direction: column; align-items: center; width: 30%; gap: 6px; }
+.flag-wrapper {
+  width: 50px; height: 50px; border-radius: 50%;
+  padding: 2px;
+  background: rgba(255,255,255,0.05);
+  box-shadow: 0 6px 16px rgba(0,0,0,0.3);
+  border: 1px solid rgba(255,255,255,0.1);
+  display: flex; justify-content: center; align-items: center;
+  overflow: hidden; transition: transform 0.3s ease;
+}
+.team-flag { width: 100%; height: 100%; object-fit: cover; border-radius: 50%; }
+.team-block:hover .flag-wrapper { transform: scale(1.08); }
+.team-name {
+  font-size: 12px; font-weight: 600; text-align: center;
+  white-space: nowrap; letter-spacing: 0.5px;
+  text-shadow: 0 2px 4px rgba(0,0,0,0.5);
+}
+
+.score-block { display: flex; flex-direction: column; align-items: center; width: 40%; }
+.match-time-badge {
+  display: flex; align-items: center; gap: 5px;
+  background: rgba(255,255,255,0.08);
+  border: 1px solid rgba(255,255,255,0.05);
+  padding: 3px 8px; border-radius: 12px;
+  font-size: 10px; font-weight: 600;
+  color: var(--color-primary);
+  margin-bottom: 6px;
+}
+.live-pulse-indicator {
+  width: 5px; height: 5px;
+  background-color: var(--color-primary);
+  border-radius: 50%;
+  animation: pulse-live 1.8s infinite;
+}
+@keyframes pulse-live {
+  0% { transform: scale(0.9); opacity: 0.5; box-shadow: 0 0 0 0 rgba(0,240,118,0.7); }
+  70% { transform: scale(1.1); opacity: 1; box-shadow: 0 0 0 4px rgba(0,240,118,0); }
+  100% { transform: scale(0.9); opacity: 0.5; box-shadow: 0 0 0 0 rgba(0,240,118,0); }
+}
+.score-display {
+  display: flex; align-items: center;
+  font-family: 'JetBrains Mono', monospace;
+  font-weight: 700; font-size: 30px; gap: 8px;
+}
+.score-num { text-shadow: 0 0 12px rgba(255,255,255,0.25); transition: transform 0.3s cubic-bezier(0.175,0.885,0.32,1.275); }
+.score-num.pop { transform: scale(1.3); color: var(--color-gold); text-shadow: 0 0 20px rgba(255,215,0,0.7); }
+.score-divider { color: var(--text-dim); opacity: 0.8; font-weight: 500; }
+.match-group-label {
+  font-size: 9px; color: var(--text-dim); margin-top: 6px;
+  background: rgba(0,0,0,0.15); padding: 2px 8px; border-radius: 8px;
+}
+
+/* ========== 赛程列表 ========== */
+.list-container { display: flex; flex-direction: column; gap: 5px; }
+.date-divider {
+  font-size: 10px; font-weight: 600; color: var(--text-dim);
+  padding: 4px 6px; letter-spacing: 0.5px;
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+}
+.match-item {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 7px 10px;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(255,255,255,0.03);
+  border-radius: 10px; transition: all 0.2s ease; cursor: pointer;
+}
+.match-item:hover { background: rgba(255,255,255,0.07); border-color: rgba(255,255,255,0.08); }
+.match-item.live-item { background: rgba(0,240,118,0.06); border-color: rgba(0,240,118,0.12); }
+.match-item.finished-item { opacity: 0.7; }
+.item-team { display: flex; align-items: center; gap: 6px; width: 35%; }
+.item-team.away { justify-content: flex-end; }
+.item-flag { width: 18px; height: 18px; border-radius: 50%; object-fit: cover; }
+.item-name { font-size: 11px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.item-mid { display: flex; flex-direction: column; align-items: center; width: 30%; }
+.item-score-box {
+  font-family: 'JetBrains Mono', monospace;
+  font-weight: 700; font-size: 12px;
+  background: rgba(0,0,0,0.2); padding: 2px 8px; border-radius: 6px;
+}
+.item-score-box.live { color: var(--color-primary); background: rgba(0,240,118,0.08); border: 1px solid rgba(0,240,118,0.1); }
+.item-status { font-size: 8px; color: var(--text-muted); margin-top: 2px; }
+.item-status.live { color: var(--color-primary); font-weight: 600; }
+
+.navigation-footer {
+  height: 36px; min-height: 36px;
+  background: rgba(0,0,0,0.25);
+  border-top: 1px solid rgba(255,255,255,0.05);
+  display: flex; justify-content: space-around; align-items: stretch;
+}
+
+.nav-item {
+  background: transparent; border: none; cursor: pointer;
+  flex: 1; height: 100%;
+  display: flex; justify-content: center; align-items: center; gap: 4px;
+  color: var(--text-muted); transition: all 0.2s ease;
+  font-size: 10px; font-family: 'Outfit', sans-serif;
+  padding: 8px 0;
+}
+
+.nav-item svg { width: 14px; height: 14px; fill: currentColor; }
+.nav-item:hover { color: var(--text-main); background: rgba(255,255,255,0.04); }
+.nav-item.active { color: var(--color-primary); background: rgba(0,240,118,0.03); }
+
+
+
+/* ========== 进球浮层 ========== */
+#goal-overlay {
+  position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+  background: radial-gradient(circle, rgba(0,240,118,0.35) 0%, rgba(6,28,20,0.95) 100%);
+  z-index: 10000;
+  display: flex; justify-content: center; align-items: center;
+  pointer-events: none;
+}
+#goal-overlay.hidden { opacity: 0; display: none !important; }
+.goal-announcement { text-align: center; animation: goal-zoom-in 0.6s cubic-bezier(0.175,0.885,0.32,1.275) forwards; }
+.goal-title {
+  font-size: 36px; font-weight: 900; color: var(--color-gold); letter-spacing: 4px;
+  text-shadow: 0 0 15px rgba(255,215,0,0.8), 0 0 30px rgba(0,240,118,0.6);
+  margin-bottom: 8px; animation: goal-shake 0.15s infinite alternate;
+}
+.goal-details { font-size: 13px; font-weight: 600; margin-bottom: 10px; }
+#goal-team-name { color: var(--color-primary); }
+.goal-score {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 22px; font-weight: 700; color: var(--color-gold);
+  text-shadow: 0 0 10px rgba(255,215,0,0.5);
+}
+@keyframes goal-zoom-in { 0% { transform: scale(0.6); opacity: 0; } 100% { transform: scale(1); opacity: 1; } }
+@keyframes goal-shake { 0% { transform: rotate(-2deg); } 100% { transform: rotate(2deg) scale(1.03); } }
