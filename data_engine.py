@@ -5,6 +5,7 @@
 - 完全免费、无需 API Key、提供极致精确的比赛阶段和实时分钟数
 """
 import json
+import re
 import time
 import requests
 from threading import Lock
@@ -27,8 +28,71 @@ TEAM_ZH = {
     "Portugal": "葡萄牙", "Uzbekistan": "乌兹别克斯坦", "Colombia": "哥伦比亚", "Peru": "秘鲁",
     "England": "英格兰", "Croatia": "克罗地亚", "Ghana": "加纳", "Panama": "巴拿马",
     "Ukraine": "乌克兰", "Wales": "威尔士", "Turkey": "土耳其", "Indonesia": "印度尼西亚",
-    "Cote d'Ivoire": "科特迪瓦", "China": "中国", "Italy": "意大利"
+    "Cote d'Ivoire": "科特迪瓦", "China": "中国", "Italy": "意大利",
+    "Iraq": "伊拉克", "Congo DR": "刚果民主共和国", "Czechia": "捷克",
+    "Bosnia-Herzegovina": "波黑", "Curaçao": "库拉索", "Türkiye": "土耳其"
 }
+
+def translate_team_name(name):
+    """翻译 ESPN 队名和淘汰赛占位符"""
+    if name in TEAM_ZH:
+        return TEAM_ZH[name]
+
+    group_winner = re.fullmatch(r"Group ([A-L]) Winner", name)
+    if group_winner:
+        return f"{group_winner.group(1)}组第1"
+
+    group_second = re.fullmatch(r"Group ([A-L]) 2nd Place", name)
+    if group_second:
+        return f"{group_second.group(1)}组第2"
+
+    third_place = re.fullmatch(r"Third Place Group ([A-L/]+)", name)
+    if third_place:
+        return f"{third_place.group(1)}组第3"
+
+    round_winner = re.fullmatch(r"Round of (32|16) (\d+) Winner", name)
+    if round_winner:
+        round_name = "32强赛" if round_winner.group(1) == "32" else "16强赛"
+        return f"{round_name}第{round_winner.group(2)}场胜者"
+
+    quarterfinal_winner = re.fullmatch(r"Quarterfinal (\d+) Winner", name)
+    if quarterfinal_winner:
+        return f"1/4决赛第{quarterfinal_winner.group(1)}场胜者"
+
+    semifinal_result = re.fullmatch(r"Semifinal (\d+) (Winner|Loser)", name)
+    if semifinal_result:
+        result = "胜者" if semifinal_result.group(2) == "Winner" else "负者"
+        return f"半决赛第{semifinal_result.group(1)}场{result}"
+
+    return name
+
+
+def extract_group_name(event, competition):
+    """从 ESPN 可能提供的备注中提取真实小组名，取不到则不显示"""
+    text_candidates = []
+
+    alt_note = competition.get("altGameNote")
+    if alt_note:
+        text_candidates.append(str(alt_note))
+
+    for note in competition.get("notes", []) or []:
+        if isinstance(note, dict):
+            text_candidates.extend(str(value) for value in note.values() if value)
+        elif note:
+            text_candidates.append(str(note))
+
+    for text in text_candidates:
+        group_match = re.search(r"\bGroup\s+([A-L])\b", text, re.IGNORECASE)
+        if group_match:
+            return f"{group_match.group(1).upper()}组"
+
+    # scoreboard 当前只提供 group-stage 这种赛段，不是具体小组，避免误显示成“小组”
+    season_slug = (event.get("season", {}) or {}).get("slug", "")
+    if season_slug and season_slug != "group-stage":
+        return season_slug.replace("-", " ").title()
+
+    return ""
+
 
 class WorldCupDataEngine:
     def __init__(self):
@@ -121,13 +185,13 @@ class WorldCupDataEngine:
 
                 match = {
                     "id": match_id,
-                    "home_team": TEAM_ZH.get(h_name_en, h_name_en),
+                    "home_team": translate_team_name(h_name_en),
                     "home_badge": home_team.get("team", {}).get("logo", ""),
-                    "away_team": TEAM_ZH.get(a_name_en, a_name_en),
+                    "away_team": translate_team_name(a_name_en),
                     "away_badge": away_team.get("team", {}).get("logo", ""),
                     "date": date_str,
                     "time": time_str,
-                    "group": ev.get("season", {}).get("slug", "").replace("-", " ").title(),
+                    "group": extract_group_name(ev, comp),
                     "venue": comp.get("venue", {}).get("fullName", ""),
                     "status_raw": status_type.get("name", ""),
                     "status": status_zh,
@@ -169,7 +233,9 @@ class WorldCupDataEngine:
     def update_tick(self):
         now = time.time()
         has_live = any(m.get("is_live") for m in self.matches)
-        interval = 20 if has_live else 120
+        has_pending = any(not m.get("is_finished") for m in self.matches)
+        # 没有直播时也要更频繁地检查，避免比赛刚开球时长时间停在旧状态
+        interval = 20 if has_live else (30 if has_pending else 120)
 
         if now - self.last_fetch_time >= interval:
             self._fetch_all_data()

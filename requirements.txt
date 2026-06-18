@@ -1,4 +1,2 @@
-pywebview
-pystray
-Pillow
+PySide6
 requests

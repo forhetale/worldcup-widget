@@ -1,5 +1,5 @@
 {
-  "mode": "top",
+  "topmost": true,
   "locked": false,
   "x": 100,
   "y": 100,

@@ -4,13 +4,11 @@ a = Analysis(
     ['main.py'],
     pathex=[],
     binaries=[],
-    datas=[
-        ('web', 'web'),
-    ],
+    datas=[],
     hiddenimports=[
-        'pywebview',
-        'pystray',
-        'PIL',
+        'PySide6.QtCore',
+        'PySide6.QtGui',
+        'PySide6.QtWidgets',
         'requests',
     ],
     hookspath=[],
