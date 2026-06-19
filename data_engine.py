@@ -106,9 +106,9 @@ class WorldCupDataEngine:
 
     def _fetch_all_data(self):
         try:
-            yesterday = (datetime.utcnow() - timedelta(days=1)).strftime("%Y%m%d")
-            today = datetime.utcnow().strftime("%Y%m%d")
-            tomorrow = (datetime.utcnow() + timedelta(days=1)).strftime("%Y%m%d")
+            yesterday = (datetime.now() - timedelta(days=1)).strftime("%Y%m%d")
+            today = datetime.now().strftime("%Y%m%d")
+            tomorrow = (datetime.now() + timedelta(days=1)).strftime("%Y%m%d")
 
             all_events = []
             request_errors = []
@@ -237,8 +237,12 @@ class WorldCupDataEngine:
         # 没有直播时也要更频繁地检查，避免比赛刚开球时长时间停在旧状态
         interval = 20 if has_live else (30 if has_pending else 120)
 
-        if now - self.last_fetch_time >= interval:
+        # 改用 _last_attempt_time 记录尝试请求的时间，确保即便是网络报错也能遵守冷却时间而不会疯狂重试
+        if now - getattr(self, "_last_attempt_time", 0) >= interval:
+            self._last_attempt_time = now
             self._fetch_all_data()
+            return True
+        return False
 
     def pop_latest_goal_event(self):
         with self.lock:

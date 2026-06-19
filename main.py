@@ -42,13 +42,14 @@ class DataWorker(QtCore.QObject):
 
         while self._running:
             try:
-                self.engine.update_tick()
+                # 只有当数据引擎真正发起了网络请求（无论成功还是超时），才将最新状态推给 UI 重绘，从而消除无效的重绘风暴
+                if self.engine.update_tick():
+                    self.data_ready.emit(self.engine.get_full_data())
 
                 goal_event = self.engine.pop_latest_goal_event()
                 if goal_event:
                     self.goal_ready.emit(goal_event)
 
-                self.data_ready.emit(self.engine.get_full_data())
             except Exception as e:
                 print(f"后台时钟异常: {e}")
 
@@ -265,7 +266,6 @@ class IconButton(QtWidgets.QPushButton):
         cy = rect.center().y()
 
         if self.icon_name == "pin":
-            # 参考现代线性图标的图钉轮廓，倾斜后更像“置顶”
             painter.save()
             painter.translate(cx, cy)
             painter.rotate(-36)
@@ -373,7 +373,8 @@ class FloatingScoreWidget(QtWidgets.QWidget):
         self.focus_match_id = None
         self.drag_offset = None
         self._startup_window_refreshed = False
-        self._first_data_window_refreshed = False
+        self._first_data_rendered = False
+        self._last_schedule_ids = []
         self.topmost = bool(config.get("topmost", True))
         self.locked = bool(config.get("locked", False))
 
@@ -387,6 +388,7 @@ class FloatingScoreWidget(QtWidgets.QWidget):
         self._build_tray()
         self._restore_position()
         self._sync_controls()
+        self.switch_view(0)
 
         QtCore.QTimer.singleShot(0, self.apply_native_window_styles)
         QtCore.QTimer.singleShot(300, self.apply_native_window_styles)
@@ -454,9 +456,9 @@ class FloatingScoreWidget(QtWidgets.QWidget):
         self.stack.addWidget(self._build_schedule_page())
         card_layout.addWidget(self.stack, 1)
 
-        footer = QtWidgets.QFrame()
-        footer.setObjectName("navigationFooter")
-        footer_layout = QtWidgets.QHBoxLayout(footer)
+        self.navigation_footer = QtWidgets.QFrame()
+        self.navigation_footer.setObjectName("navigationFooter")
+        footer_layout = QtWidgets.QHBoxLayout(self.navigation_footer)
         footer_layout.setContentsMargins(4, 4, 4, 4)
         footer_layout.setSpacing(4)
 
@@ -464,7 +466,7 @@ class FloatingScoreWidget(QtWidgets.QWidget):
         self.schedule_nav = self._make_nav_button("赛程", 1)
         footer_layout.addWidget(self.live_nav)
         footer_layout.addWidget(self.schedule_nav)
-        card_layout.addWidget(footer)
+        card_layout.addWidget(self.navigation_footer)
         self.switch_view(0)
 
         self.goal_overlay = QtWidgets.QFrame(self.card)
@@ -598,7 +600,8 @@ class FloatingScoreWidget(QtWidgets.QWidget):
         button = QtWidgets.QPushButton(text)
         button.setObjectName("navButton")
         button.setCheckable(True)
-        button.clicked.connect(lambda: self.switch_view(index))
+        button.setFocusPolicy(QtCore.Qt.NoFocus)
+        button.clicked.connect(lambda checked=False, nav_index=index: self.switch_view(nav_index))
         return button
 
     def _build_tray(self):
@@ -701,31 +704,103 @@ class FloatingScoreWidget(QtWidgets.QWidget):
                 self.lock_control.raise_()
 
     def toggle_topmost(self):
+        QtCore.QTimer.singleShot(10, self._do_toggle_topmost)
+
+    def _do_toggle_topmost(self):
         self.topmost = not self.topmost
         self._apply_window_flags()
-        self.show()
+        
         self.apply_native_window_styles()
+        self.show()
+        
         self._sync_controls()
         self._save_config()
+        
+        self.activateWindow()
+        self.update()
+        
+        size = self.size()
+        self.resize(size.width(), size.height() + 1)
+        QtWidgets.QApplication.processEvents()
+        self.resize(size)
 
     def toggle_locked(self):
+        QtCore.QTimer.singleShot(10, self._do_toggle_locked)
+
+    def _do_toggle_locked(self):
         self.locked = not self.locked
         self._sync_controls()
         self.apply_native_window_styles()
         self._save_config()
+        
+        if not self.locked:
+            self.activateWindow()
+            self.update()
+            
+            size = self.size()
+            self.resize(size.width(), size.height() + 1)
+            QtWidgets.QApplication.processEvents()
+            self.resize(size)
 
     def switch_view(self, index):
         self.stack.setCurrentIndex(index)
         self.live_nav.setChecked(index == 0)
         self.schedule_nav.setChecked(index == 1)
+        self.live_nav.update()
+        self.schedule_nav.update()
+        self.stack.update()
+        self.card.update()
+        self.update()
+
+    def eventFilter(self, watched, event):
+        return super().eventFilter(watched, event)
 
     @QtCore.Slot(dict)
     def update_data(self, data):
-        self.current_data = data
-        self._render_current_data()
-        if not self._first_data_window_refreshed:
-            self._first_data_window_refreshed = True
-            QtCore.QTimer.singleShot(0, self._refresh_window_after_first_data)
+        try:
+            print(f"[UI] update_data 被调用, matches={len(data.get('matches', []))}, has_live={data.get('has_live')}")
+            self.current_data = data
+            self._update_status(data)
+            self._render_focus_match()
+            self._render_schedule()
+
+            # 强制布局系统立即处理 show/hide 引起的变更
+            self.card.updateGeometry()
+            self.stack.currentWidget().updateGeometry()
+            QtWidgets.QApplication.processEvents()
+
+            # 强制 DWM 合成器重绘透明窗口：resize trick 是 WA_TranslucentBackground 唯一可靠的手段
+            size = self.size()
+            self.resize(size.width(), size.height() + 1)
+            QtWidgets.QApplication.processEvents()
+            self.resize(size)
+
+            # 首次数据到达时，延迟做一次额外的强制重绘以确保 DWM 合成正确
+            if not self._first_data_rendered:
+                self._first_data_rendered = True
+                QtCore.QTimer.singleShot(200, self._force_first_data_repaint)
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            print(f"[UI] update_data 异常: {e}")
+
+    def _force_first_data_repaint(self):
+        """首次数据到达后的延迟强制重绘，确保透明窗口在启动阶段正确显示"""
+        if self.current_data:
+            self._render_focus_match()
+            self._render_schedule()
+
+            # 强制整个控件树 repaint
+            self.card.repaint()
+            self.stack.repaint()
+            self.no_match_panel.repaint()
+            self.match_card.repaint()
+
+            size = self.size()
+            self.resize(size.width(), size.height() + 1)
+            QtWidgets.QApplication.processEvents()
+            self.resize(size)
+            self.repaint()
 
     @QtCore.Slot(dict)
     def show_goal_event(self, event):
@@ -771,32 +846,6 @@ class FloatingScoreWidget(QtWidgets.QWidget):
         if self._startup_window_refreshed:
             return
         self._startup_window_refreshed = True
-        position = self.pos()
-        self._apply_window_flags()
-        self.move(position)
-        self.show()
-        self.apply_native_window_styles()
-        self._sync_controls()
-        self._refresh_after_first_data()
-
-    def _refresh_window_after_first_data(self):
-        if not self.current_data:
-            return
-
-        position = self.pos()
-        original_topmost = self.topmost
-
-        # 模拟一次置顶开关带来的原生窗口重建，但最终保持用户原来的置顶状态
-        self.topmost = not original_topmost
-        self._apply_window_flags()
-        self.move(position)
-        self.show()
-        self.apply_native_window_styles()
-
-        self.topmost = original_topmost
-        self._apply_window_flags()
-        self.move(position)
-        self.show()
         self.apply_native_window_styles()
         self._sync_controls()
         self._refresh_after_first_data()
@@ -815,9 +864,11 @@ class FloatingScoreWidget(QtWidgets.QWidget):
 
     def _render_focus_match(self):
         matches = self.current_data.get("matches", []) if self.current_data else []
-        match = next((item for item in matches if item.get("is_live")), None)
-        if not match and self.focus_match_id:
+        match = None
+        if self.focus_match_id:
             match = next((item for item in matches if item.get("id") == self.focus_match_id), None)
+        if not match:
+            match = next((item for item in matches if item.get("is_live")), None)
 
         if not match:
             next_match = next((item for item in matches if not item.get("is_finished") and not item.get("is_live")), None)
@@ -869,8 +920,15 @@ class FloatingScoreWidget(QtWidgets.QWidget):
         self.status_badge.style().polish(self.status_badge)
 
     def _render_schedule(self):
-        self._clear_schedule()
         matches = self.current_data.get("matches", []) if self.current_data else []
+
+        # 构建去重签名：仅在比赛列表或比分真正变化时才重建 UI
+        new_ids = [(m.get("id"), m.get("home_score"), m.get("away_score"), m.get("status")) for m in matches]
+        if new_ids == self._last_schedule_ids:
+            return
+        self._last_schedule_ids = new_ids
+
+        self._clear_schedule()
         last_date = ""
 
         for match in matches:
@@ -900,6 +958,8 @@ class FloatingScoreWidget(QtWidgets.QWidget):
         super().resizeEvent(event)
         if hasattr(self, "goal_overlay"):
             self.goal_overlay.setGeometry(self.card.rect())
+        if hasattr(self, "lock_control") and self.locked:
+            self.lock_control.move_to_owner_lock_button(self.lock_btn.mapToGlobal(QtCore.QPoint(-4, -4)))
 
     def showEvent(self, event):
         super().showEvent(event)
@@ -909,10 +969,17 @@ class FloatingScoreWidget(QtWidgets.QWidget):
     def mousePressEvent(self, event):
         if event.button() == QtCore.Qt.LeftButton and not self.locked:
             child = self.childAt(event.position().toPoint())
-            if isinstance(child, QtWidgets.QPushButton):
+            if child and self._is_control_child(child):
                 return
             self.drag_offset = event.globalPosition().toPoint() - self.frameGeometry().topLeft()
             event.accept()
+
+    def _is_control_child(self, widget):
+        while widget is not None and widget is not self:
+            if isinstance(widget, QtWidgets.QPushButton):
+                return True
+            widget = widget.parentWidget()
+        return False
 
     def mouseMoveEvent(self, event):
         if self.drag_offset and event.buttons() & QtCore.Qt.LeftButton and not self.locked:
@@ -1288,7 +1355,7 @@ def main():
     app.aboutToQuit.connect(worker.stop)
     widget.data_thread = thread
     widget.data_worker = worker
-    QtCore.QTimer.singleShot(0, thread.start)
+    QtCore.QTimer.singleShot(100, thread.start)
 
     try:
         sys.exit(app.exec())
