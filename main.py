@@ -156,11 +156,12 @@ class LockControlWindow(QtWidgets.QWidget):
     """锁定状态下保留可点击的小控制窗"""
 
     def __init__(self, owner):
-        super().__init__(None)
+        super().__init__(owner)
         self.owner = owner
         self.setWindowTitle("世界杯比分挂件锁定按钮")
         self.setAttribute(QtCore.Qt.WA_TranslucentBackground, True)
         self.setAttribute(QtCore.Qt.WA_ShowWithoutActivating, True)
+        self.setAttribute(QtCore.Qt.WA_TransparentForMouseEvents, False)
         self.setFixedSize(32, 32)
         self.setWindowFlags(
             QtCore.Qt.FramelessWindowHint
@@ -221,7 +222,8 @@ class IconButton(QtWidgets.QPushButton):
         painter = QtGui.QPainter(self)
         painter.setRenderHint(QtGui.QPainter.Antialiasing)
 
-        active = bool(self.property("active"))
+        active_val = self.property("active")
+        active = active_val in (True, "true", "True", 1, "1")
         hovered = self.underMouse()
         is_close_hovered = self.objectName() == "closeButton" and hovered
 
@@ -380,7 +382,6 @@ class FloatingScoreWidget(QtWidgets.QWidget):
 
         self.setWindowTitle(WIDGET_TITLE)
         self.setAttribute(QtCore.Qt.WA_TranslucentBackground, True)
-        self.setAttribute(QtCore.Qt.WA_ShowWithoutActivating, True)
         self.setFixedSize(config.get("width", 400), config.get("height", 280))
         self._apply_window_flags()
         self._build_ui()
@@ -390,8 +391,7 @@ class FloatingScoreWidget(QtWidgets.QWidget):
         self._sync_controls()
         self.switch_view(0)
 
-        QtCore.QTimer.singleShot(0, self.apply_native_window_styles)
-        QtCore.QTimer.singleShot(300, self.apply_native_window_styles)
+        QtCore.QTimer.singleShot(0, self._init_native_window)
         QtCore.QTimer.singleShot(100, self._refresh_window_after_startup)
         QtCore.QTimer.singleShot(0, self._force_initial_refresh)
 
@@ -593,6 +593,9 @@ class FloatingScoreWidget(QtWidgets.QWidget):
         button.setObjectName("actionButton")
         button.setToolTip(tooltip)
         button.setFixedSize(24, 24)
+        sp = button.sizePolicy()
+        sp.setRetainSizeWhenHidden(True)
+        button.setSizePolicy(sp)
         button.clicked.connect(callback)
         return button
 
@@ -672,7 +675,9 @@ class FloatingScoreWidget(QtWidgets.QWidget):
         self.tray_topmost.setChecked(self.topmost)
         self.tray_locked.setChecked(self.locked)
 
-        for widget in (self.topmost_btn, self.lock_btn, self.card, self.close_btn):
+        self.lock_control.button.setProperty("active", True)
+
+        for widget in (self.topmost_btn, self.lock_btn, self.card, self.close_btn, self.lock_control.button):
             widget.style().unpolish(widget)
             widget.style().polish(widget)
             widget.update()
@@ -688,9 +693,19 @@ class FloatingScoreWidget(QtWidgets.QWidget):
             self.lock_btn.show()
             self.lock_control.hide()
 
-    def apply_native_window_styles(self):
+    def _init_native_window(self):
+        """初始化原生窗口样式（仅在窗口创建或被 setWindowFlags 重建后调用）。
+        
+        包含 SWP_FRAMECHANGED 的重操作，会破坏 DWM 合成状态，
+        因此不可在窗口可见时反复调用。
+        """
         hwnd = int(self.winId())
         wm.init_window_styles(hwnd)
+        self.apply_native_window_styles()
+
+    def apply_native_window_styles(self):
+        """应用当前的置顶和穿透状态（可安全反复调用，不触发 SWP_FRAMECHANGED）"""
+        hwnd = int(self.winId())
         wm.set_topmost(hwnd, self.topmost)
         wm.set_global_click_through(hwnd, self.locked)
         self.setAttribute(QtCore.Qt.WA_TransparentForMouseEvents, self.locked)
@@ -710,7 +725,7 @@ class FloatingScoreWidget(QtWidgets.QWidget):
         self.topmost = not self.topmost
         self._apply_window_flags()
         
-        self.apply_native_window_styles()
+        self._init_native_window()
         self.show()
         
         self._sync_controls()
@@ -718,29 +733,46 @@ class FloatingScoreWidget(QtWidgets.QWidget):
         
         self.activateWindow()
         self.update()
-        
-        size = self.size()
-        self.resize(size.width(), size.height() + 1)
-        QtWidgets.QApplication.processEvents()
-        self.resize(size)
+        self._force_dwm_repaint()
 
     def toggle_locked(self):
         QtCore.QTimer.singleShot(10, self._do_toggle_locked)
 
     def _do_toggle_locked(self):
         self.locked = not self.locked
+        
+        needs_rebuild = False
+        if self.locked and not self.topmost:
+            self.topmost = True
+            needs_rebuild = True
+            
         self._sync_controls()
-        self.apply_native_window_styles()
-        self._save_config()
         
         if not self.locked:
-            self.activateWindow()
-            self.update()
+            # 递归清除所有子控件上残留的鼠标穿透属性
+            self._clear_mouse_transparent_recursive(self)
+            needs_rebuild = True
             
-            size = self.size()
-            self.resize(size.width(), size.height() + 1)
-            QtWidgets.QApplication.processEvents()
-            self.resize(size)
+        if needs_rebuild:
+            # 通过重建窗口 flags 来彻底刷新 Qt 事件传播管道和置顶状态
+            self._apply_window_flags()
+            self.show()
+            self.activateWindow()
+            self._init_native_window()
+        else:
+            self.apply_native_window_styles()
+            
+        self._save_config()
+        self.update()
+        if self.locked:
+            self.lock_control.move_to_owner_lock_button()
+        self._force_dwm_repaint()
+
+    def _clear_mouse_transparent_recursive(self, widget):
+        """递归清除控件树上的 WA_TransparentForMouseEvents 属性"""
+        widget.setAttribute(QtCore.Qt.WA_TransparentForMouseEvents, False)
+        for child in widget.findChildren(QtWidgets.QWidget):
+            child.setAttribute(QtCore.Qt.WA_TransparentForMouseEvents, False)
 
     def switch_view(self, index):
         self.stack.setCurrentIndex(index)
@@ -751,6 +783,20 @@ class FloatingScoreWidget(QtWidgets.QWidget):
         self.stack.update()
         self.card.update()
         self.update()
+        self._force_dwm_repaint()
+
+    def _force_dwm_repaint(self):
+        """强制 DWM 合成器重绘 WA_TranslucentBackground 透明窗口。
+
+        setFixedSize 会使 resize() 被钳位从而变成 no-op，
+        因此需要先暂时放开最大高度约束，执行 resize trick，再恢复约束。
+        """
+        size = self.size()
+        self.setMaximumHeight(size.height() + 2)
+        self.resize(size.width(), size.height() + 1)
+        QtWidgets.QApplication.processEvents()
+        self.resize(size)
+        self.setMaximumHeight(size.height())
 
     def eventFilter(self, watched, event):
         return super().eventFilter(watched, event)
@@ -769,11 +815,8 @@ class FloatingScoreWidget(QtWidgets.QWidget):
             self.stack.currentWidget().updateGeometry()
             QtWidgets.QApplication.processEvents()
 
-            # 强制 DWM 合成器重绘透明窗口：resize trick 是 WA_TranslucentBackground 唯一可靠的手段
-            size = self.size()
-            self.resize(size.width(), size.height() + 1)
-            QtWidgets.QApplication.processEvents()
-            self.resize(size)
+            # 强制 DWM 合成器重绘透明窗口
+            self._force_dwm_repaint()
 
             # 首次数据到达时，延迟做一次额外的强制重绘以确保 DWM 合成正确
             if not self._first_data_rendered:
@@ -796,11 +839,7 @@ class FloatingScoreWidget(QtWidgets.QWidget):
             self.no_match_panel.repaint()
             self.match_card.repaint()
 
-            size = self.size()
-            self.resize(size.width(), size.height() + 1)
-            QtWidgets.QApplication.processEvents()
-            self.resize(size)
-            self.repaint()
+            self._force_dwm_repaint()
 
     @QtCore.Slot(dict)
     def show_goal_event(self, event):
@@ -846,7 +885,7 @@ class FloatingScoreWidget(QtWidgets.QWidget):
         if self._startup_window_refreshed:
             return
         self._startup_window_refreshed = True
-        self.apply_native_window_styles()
+        self._init_native_window()
         self._sync_controls()
         self._refresh_after_first_data()
 
@@ -1033,13 +1072,6 @@ QWidget {
   border-radius: 18px;
 }
 
-#widgetCard[locked="true"] {
-  background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
-    stop:0 rgba(132, 154, 143, 188),
-    stop:0.52 rgba(118, 135, 128, 178),
-    stop:1 rgba(146, 136, 126, 184));
-  border: 1px solid rgba(255, 255, 255, 82);
-}
 
 #widgetCard[locked="true"] #brandText,
 #widgetCard[locked="true"] #teamName,
@@ -1345,6 +1377,14 @@ def main():
     config = wm.load_config()
     widget = FloatingScoreWidget(config)
     widget.show()
+
+    # 启动保底：延迟重建窗口以确保 DWM 合成器与 Qt 的 UpdateLayeredWindow 管道完全同步
+    def _startup_ensure_dwm():
+        widget._apply_window_flags()
+        widget._init_native_window()
+        widget.show()
+        widget.activateWindow()
+    QtCore.QTimer.singleShot(400, _startup_ensure_dwm)
 
     thread = QtCore.QThread()
     worker = DataWorker()
