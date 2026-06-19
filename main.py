@@ -17,6 +17,10 @@ ICON_PATHS = {
         '<rect x="4" y="11" width="16" height="10" rx="2.8"/>'
         '<path d="M8 11V7a4 4 0 0 1 8 0v4"/>'
     ),
+    "unlock": (
+        '<rect x="4" y="11" width="16" height="10" rx="2.8"/>'
+        '<path d="M8 11V7a4 4 0 0 1 7.5-.5"/>'
+    ),
     "close": (
         '<path d="M18 6 6 18"/>'
         '<path d="m6 6 12 12"/>'
@@ -77,8 +81,6 @@ class TeamBadge(QtWidgets.QLabel):
         self._badge_url = ""
         self._pixmap = QtGui.QPixmap()
         self._loading = False
-        self._manager = QtNetwork.QNetworkAccessManager(self)
-        self._manager.finished.connect(self._handle_badge_reply)
 
     def set_team(self, name, badge_url=""):
         """设置球队名称和 ESPN 国旗图片地址"""
@@ -97,28 +99,13 @@ class TeamBadge(QtWidgets.QLabel):
             if cached_pixmap and not cached_pixmap.isNull():
                 self._pixmap = cached_pixmap
             else:
-                self._loading = True
-                request = QtNetwork.QNetworkRequest(QtCore.QUrl(badge_url))
-                request.setRawHeader(b"User-Agent", b"WorldCupDesktopWidget/2026")
-                self._manager.get(request)
+                import os
+                if os.path.exists(badge_url):
+                    pixmap = QtGui.QPixmap()
+                    if pixmap.load(badge_url):
+                        self._pixmap_cache[badge_url] = pixmap
+                        self._pixmap = pixmap
 
-        self.update()
-
-    def _handle_badge_reply(self, reply):
-        """接收异步下载的国旗图片"""
-        request_url = reply.request().url().toString()
-        if request_url != self._badge_url:
-            reply.deleteLater()
-            return
-
-        self._loading = False
-        if reply.error() == QtNetwork.QNetworkReply.NoError:
-            pixmap = QtGui.QPixmap()
-            if pixmap.loadFromData(bytes(reply.readAll())):
-                self._pixmap_cache[request_url] = pixmap
-                self._pixmap = pixmap
-
-        reply.deleteLater()
         self.update()
 
     def paintEvent(self, event):
@@ -201,7 +188,14 @@ class IconButton(QtWidgets.QPushButton):
 
     def _draw_svg_icon(self, painter, color):
         """使用内置 SVG 路径绘制更规整的线性图标"""
-        paths = ICON_PATHS.get(self.icon_name)
+        icon_name = self.icon_name
+        active_val = self.property("active")
+        active = active_val in (True, "true", "True", 1, "1")
+        
+        if icon_name == "lock" and not active:
+            icon_name = "unlock"
+            
+        paths = ICON_PATHS.get(icon_name)
         if not paths:
             return False
 
@@ -289,10 +283,15 @@ class IconButton(QtWidgets.QPushButton):
         elif self.icon_name == "lock":
             painter.drawRoundedRect(cx - 6, cy - 1, 12, 8, 2.4, 2.4)
             path = QtGui.QPainterPath()
-            path.moveTo(cx - 4.4, cy - 1)
-            path.lineTo(cx - 4.4, cy - 4.4)
-            path.cubicTo(cx - 4.4, cy - 9.0, cx + 4.4, cy - 9.0, cx + 4.4, cy - 4.4)
-            path.lineTo(cx + 4.4, cy - 1)
+            if active:
+                path.moveTo(cx - 4.4, cy - 1)
+                path.lineTo(cx - 4.4, cy - 4.4)
+                path.cubicTo(cx - 4.4, cy - 9.0, cx + 4.4, cy - 9.0, cx + 4.4, cy - 4.4)
+                path.lineTo(cx + 4.4, cy - 1)
+            else:
+                path.moveTo(cx + 4.4, cy - 4.4)
+                path.cubicTo(cx + 4.4, cy - 9.0, cx - 4.4, cy - 9.0, cx - 4.4, cy - 4.4)
+                path.lineTo(cx - 4.4, cy - 1)
             painter.drawPath(path)
             painter.setBrush(icon_color)
             painter.setPen(QtCore.Qt.NoPen)
@@ -502,6 +501,7 @@ class FloatingScoreWidget(QtWidgets.QWidget):
         self.next_match_hint = QtWidgets.QLabel("请切换到“赛程”查看后续比赛安排")
         self.next_match_hint.setObjectName("noMatchSub")
         self.next_match_hint.setWordWrap(True)
+        self.next_match_hint.setAlignment(QtCore.Qt.AlignCenter)
         no_match_layout.addWidget(self.no_match_title, alignment=QtCore.Qt.AlignCenter)
         no_match_layout.addWidget(self.next_match_hint, alignment=QtCore.Qt.AlignCenter)
 
@@ -709,13 +709,11 @@ class FloatingScoreWidget(QtWidgets.QWidget):
         wm.set_topmost(hwnd, self.topmost)
         wm.set_global_click_through(hwnd, self.locked)
         self.setAttribute(QtCore.Qt.WA_TransparentForMouseEvents, self.locked)
-        if self.topmost:
-            self.raise_()
 
         if hasattr(self, "lock_control"):
             wm.set_global_click_through(int(self.lock_control.winId()), False)
-            wm.set_topmost(int(self.lock_control.winId()), True)
             if self.locked:
+                wm.set_topmost(int(self.lock_control.winId()), True)
                 self.lock_control.raise_()
 
     def toggle_topmost(self):
@@ -723,17 +721,15 @@ class FloatingScoreWidget(QtWidgets.QWidget):
 
     def _do_toggle_topmost(self):
         self.topmost = not self.topmost
-        self._apply_window_flags()
         
-        self._init_native_window()
+        self.setWindowFlag(QtCore.Qt.WindowStaysOnTopHint, self.topmost)
         self.show()
+        self._init_native_window()
         
         self._sync_controls()
         self._save_config()
         
-        self.activateWindow()
         self.update()
-        self._force_dwm_repaint()
 
     def toggle_locked(self):
         QtCore.QTimer.singleShot(10, self._do_toggle_locked)
@@ -741,23 +737,20 @@ class FloatingScoreWidget(QtWidgets.QWidget):
     def _do_toggle_locked(self):
         self.locked = not self.locked
         
-        needs_rebuild = False
+        needs_reinit = False
         if self.locked and not self.topmost:
             self.topmost = True
-            needs_rebuild = True
+            self.setWindowFlag(QtCore.Qt.WindowStaysOnTopHint, True)
+            self.show()
+            needs_reinit = True
             
         self._sync_controls()
         
         if not self.locked:
             # 递归清除所有子控件上残留的鼠标穿透属性
             self._clear_mouse_transparent_recursive(self)
-            needs_rebuild = True
             
-        if needs_rebuild:
-            # 通过重建窗口 flags 来彻底刷新 Qt 事件传播管道和置顶状态
-            self._apply_window_flags()
-            self.show()
-            self.activateWindow()
+        if needs_reinit:
             self._init_native_window()
         else:
             self.apply_native_window_styles()
@@ -794,9 +787,13 @@ class FloatingScoreWidget(QtWidgets.QWidget):
         size = self.size()
         self.setMaximumHeight(size.height() + 2)
         self.resize(size.width(), size.height() + 1)
-        QtWidgets.QApplication.processEvents()
-        self.resize(size)
-        self.setMaximumHeight(size.height())
+        
+        # 核心修复：不能在同一帧内 resize 回去，否则会被 DWM 优化掉导致不重绘
+        def restore():
+            self.resize(size)
+            self.setMaximumHeight(size.height())
+            
+        QtCore.QTimer.singleShot(50, restore)
 
     def eventFilter(self, watched, event):
         return super().eventFilter(watched, event)
@@ -894,8 +891,6 @@ class FloatingScoreWidget(QtWidgets.QWidget):
             return
         self._render_current_data()
         self.show()
-        if self.topmost:
-            self.raise_()
         self.update()
         self.repaint()
         self.card.update()
@@ -913,7 +908,7 @@ class FloatingScoreWidget(QtWidgets.QWidget):
             next_match = next((item for item in matches if not item.get("is_finished") and not item.get("is_live")), None)
             if next_match:
                 self.next_match_hint.setText(
-                    f"下一场：{next_match['home_team']} vs {next_match['away_team']} · "
+                    f"下一场：{next_match['home_team']} vs {next_match['away_team']}\n"
                     f"{next_match['date']} {next_match['time']}"
                 )
             else:

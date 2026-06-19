@@ -1,4 +1,5 @@
 import ctypes
+from ctypes import wintypes
 import json
 import os
 
@@ -21,6 +22,16 @@ SWP_FRAMECHANGED = 0x0020
 SWP_NOACTIVATE = 0x0010
 
 user32 = ctypes.windll.user32
+
+# 明确设置参数类型防止 64 位下指针截断
+user32.SetWindowPos.argtypes = [wintypes.HWND, wintypes.HWND, ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_uint]
+user32.SetWindowPos.restype = wintypes.BOOL
+
+user32.GetWindowLongW.argtypes = [wintypes.HWND, ctypes.c_int]
+user32.GetWindowLongW.restype = ctypes.c_long
+
+user32.SetWindowLongW.argtypes = [wintypes.HWND, ctypes.c_int, ctypes.c_long]
+user32.SetWindowLongW.restype = ctypes.c_long
 
 # 全局变量保存窗口句柄
 _hwnd = None

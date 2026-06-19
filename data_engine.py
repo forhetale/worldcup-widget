@@ -10,6 +10,28 @@ import time
 import requests
 from threading import Lock
 from datetime import datetime, timedelta, timezone
+import os
+
+CACHE_DIR = os.path.join(os.path.expanduser("~"), ".worldcup_widget", "flags")
+try:
+    os.makedirs(CACHE_DIR, exist_ok=True)
+except:
+    pass
+
+def _download_logo(url):
+    if not url: return ""
+    filename = url.split('/')[-1]
+    local_path = os.path.join(CACHE_DIR, filename)
+    if os.path.exists(local_path): return local_path
+    try:
+        r = requests.get(url, timeout=5)
+        if r.status_code == 200:
+            with open(local_path, "wb") as f:
+                f.write(r.content)
+            return local_path
+    except:
+        pass
+    return url
 
 BASE_URL = "https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/scoreboard"
 
@@ -186,9 +208,9 @@ class WorldCupDataEngine:
                 match = {
                     "id": match_id,
                     "home_team": translate_team_name(h_name_en),
-                    "home_badge": home_team.get("team", {}).get("logo", ""),
+                    "home_badge": _download_logo(home_team.get("team", {}).get("logo", "")),
                     "away_team": translate_team_name(a_name_en),
-                    "away_badge": away_team.get("team", {}).get("logo", ""),
+                    "away_badge": _download_logo(away_team.get("team", {}).get("logo", "")),
                     "date": date_str,
                     "time": time_str,
                     "group": extract_group_name(ev, comp),
