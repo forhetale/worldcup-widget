@@ -66,52 +66,55 @@ def save_config(config):
         print(f"保存配置失败: {e}")
 
 def init_window_styles(hwnd):
-    """初始化窗口的 Windows 样式，如无任务栏图标、分层透明样式等"""
+    """初始化窗口的 Windows 样式，如无任务栏图标等。
+    
+    注意：不再手动添加 WS_EX_LAYERED，Qt 已为 WA_TranslucentBackground 窗口设置，
+    重复添加配合 SWP_FRAMECHANGED 会破坏 Qt 内部的 UpdateLayeredWindow 渲染管道。
+    """
     global _hwnd
     _hwnd = hwnd
     
-    # 设为 Tool Window（不显示在任务栏和 Alt+Tab 切换中）
+    # 仅追加 Tool Window 样式（不显示在任务栏和 Alt+Tab 中）
     style = user32.GetWindowLongW(hwnd, GWL_EXSTYLE)
     style |= WS_EX_TOOLWINDOW
-    style |= WS_EX_LAYERED
     user32.SetWindowLongW(hwnd, GWL_EXSTYLE, style)
     
     # 触发样式更新
     user32.SetWindowPos(hwnd, 0, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_FRAMECHANGED)
 
 def set_topmost(hwnd, enable):
-    """切换窗口置顶"""
-    user32.SetParent(hwnd, 0)
+    """切换窗口置顶。
+    
+    注意：不再调用 SetParent(hwnd, 0)，该调用会破坏分层窗口的 DWM 合成状态，
+    导致 Qt 后续的 UpdateLayeredWindow 调用无法正确刷新画面。
+    """
+    flags = SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW | SWP_NOACTIVATE
     if enable:
-        flags = SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW | SWP_NOACTIVATE
         user32.SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0, flags)
-        user32.SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0, flags | SWP_FRAMECHANGED)
     else:
-        flags = SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW | SWP_NOACTIVATE
         user32.SetWindowPos(hwnd, HWND_NOTOPMOST, 0, 0, 0, 0, flags)
 
 def keep_topmost(hwnd):
     """再次确认窗口保持在置顶层"""
-    user32.SetParent(hwnd, 0)
     user32.SetWindowPos(
         hwnd,
         HWND_TOPMOST,
-        0,
-        0,
-        0,
-        0,
+        0, 0, 0, 0,
         SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW | SWP_NOACTIVATE
     )
 
 def set_global_click_through(hwnd, enable):
-    """设置系统级的全局鼠标穿透"""
+    """设置系统级的全局鼠标穿透。
+    
+    注意：不再使用 SWP_FRAMECHANGED，该标志会破坏 Qt 的分层窗口渲染管道导致窗口变白。
+    SetWindowLongW 本身已经足够让 WS_EX_TRANSPARENT 生效。
+    """
     style = user32.GetWindowLongW(hwnd, GWL_EXSTYLE)
     if enable:
         style |= WS_EX_TRANSPARENT
     else:
         style &= ~WS_EX_TRANSPARENT
     user32.SetWindowLongW(hwnd, GWL_EXSTYLE, style)
-    user32.SetWindowPos(hwnd, 0, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_FRAMECHANGED)
 
 def get_window_rect(hwnd):
     """获取窗口当前位置与大小"""
